@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -222,8 +223,10 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 		// Fallback on wget if curl failed for any reason (such as not being installed)
 		Command: fmt.Sprintf(
 			"curl -L %s %s -o %s %s || wget %s %s -O %s %s",
-			p.sslFlag("curl"), p.userPass("curl"), p.config.DownloadPath, bootstrapURL,
-			p.sslFlag("wget"), p.userPass("wget"), p.config.DownloadPath, bootstrapURL),
+			p.sslFlag("curl"), "curl", p.config.DownloadPath, bootstrapURL,
+			p.sslFlag("wget"), "wget", p.config.DownloadPath, bootstrapURL),
+		Stdout: bytes.NewBuffer([]byte(``)),
+		Stderr: bytes.NewBuffer([]byte(``)),
 	}
 	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
 	if err := comm.Start(ctx, &cmd); err != nil {
@@ -299,27 +302,6 @@ func (p *Provisioner) sslFlag(cmdType string) string {
 func (p *Provisioner) enableSudo() string {
 	if p.config.UseSudo {
 		return "sudo"
-	}
-	return ""
-}
-
-// Deal with curl & wget username and password
-func (p *Provisioner) userPass(cmdType string) string {
-	if p.config.Username != "" {
-		switch(cmdType) {
-		case "curl":
-			if p.config.Password == "" {
-				return fmt.Sprintf("-u %s", p.config.Username)
-			}
-			return fmt.Sprintf("-u %s:%s", p.config.Username, p.config.Password)
-		case "wget":
-			if p.config.Password == "" {
-				return fmt.Sprintf("--user=%s", p.config.Username)
-			}
-			return fmt.Sprintf("--user=%s --password=%s", p.config.Username, p.config.Password)
-		default:
-			return  ""
-		}
 	}
 	return ""
 }

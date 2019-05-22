@@ -6,7 +6,10 @@
     }],
     "provisioners":[
         {
-            "type": "deno"
+            "type": "deno",
+            "scripts": [
+                "deno-scripts/makeuser.ts"
+            ]
         }
     ],
     "post-processors": [
