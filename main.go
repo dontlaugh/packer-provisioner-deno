@@ -15,10 +15,13 @@ import (
 
 // GossConfig holds the config data coming in from the packer template
 type GossConfig struct {
-	// Goss installation
+	// Deno version to download; NOTE: currently only the latest is available
 	Version      string
+	// Deno arch; NOTE: currently only amd64 is supported
 	Arch         string
-	URL          string
+
+	// DownloadPath is the target location for the installer script right now, but should
+	// eventually be our target location for deno installation itself.
 	DownloadPath string
 	Username     string
 	Password     string
@@ -27,8 +30,8 @@ type GossConfig struct {
 	// Enable debug for goss (defaults to false)
 	Debug bool
 
-	// An array of tests to run.
-	Tests []string
+	// A slice of scripts to compile and run.
+	Scripts []string
 
 	// Use Sudo
 	UseSudo bool `mapstructure:"use_sudo"`
@@ -38,12 +41,6 @@ type GossConfig struct {
 
 	// The --gossfile flag
 	GossFile string `mapstructure:"goss_file"`
-
-	// The --vars flag
-	// Optional file containing variables, used within GOSS templating.
-	// Must be one of the files contained in the Tests array.
-	// Can be YAML or JSON.
-	VarsFile string `mapstructure:"vars_file"`
 
 	// The remote folder where the goss tests will be uploaded to.
 	// This should be set to a pre-existing directory, it defaults to /tmp
@@ -73,11 +70,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	server.RegisterProvisioner(new(Provisioner))
+	err = server.RegisterProvisioner(new(Provisioner))
+	if err != nil {
+		panic(err)
+	}
 	server.Serve()
 }
 
-// Prepare gets the Goss Privisioner ready to run
+// Prepare parses and validates our provisioner config.
 func (p *Provisioner) Prepare(raws ...interface{}) error {
 	err := config.Decode(&p.config, &config.DecodeOpts{
 		Interpolate:        true,
@@ -91,21 +91,15 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	}
 
 	if p.config.Version == "" {
-		p.config.Version = "0.3.2"
+		p.config.Version = "0.6.0"
 	}
 
 	if p.config.Arch == "" {
 		p.config.Arch = "amd64"
 	}
 
-	if p.config.URL == "" {
-		p.config.URL = fmt.Sprintf(
-			"https://github.com/aelsabbahy/goss/releases/download/v%s/goss-linux-%s",
-			p.config.Version, p.config.Arch)
-	}
-
 	if p.config.DownloadPath == "" {
-		p.config.DownloadPath = fmt.Sprintf("/tmp/goss-%s-linux-%s", p.config.Version, p.config.Arch)
+		p.config.DownloadPath = fmt.Sprintf("/tmp/deno")
 	}
 
 	if p.config.RemoteFolder == "" {
@@ -113,11 +107,11 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	}
 
 	if p.config.RemotePath == "" {
-		p.config.RemotePath = fmt.Sprintf("%s/goss", p.config.RemoteFolder)
+		p.config.RemotePath = fmt.Sprintf("%s/.deno", p.config.RemoteFolder)
 	}
 
-	if p.config.Tests == nil {
-		p.config.Tests = make([]string, 0)
+	if p.config.Scripts == nil {
+		p.config.Scripts = make([]string, 0)
 	}
 
 	if p.config.GossFile != "" {
@@ -140,15 +134,15 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		}
 	}
 
-	if len(p.config.Tests) == 0 {
+	if len(p.config.Scripts) == 0 {
 		errs = packer.MultiErrorAppend(errs,
-			errors.New("tests must be specified"))
+			errors.New("at least one script must be specified"))
 	}
 
-	for _, path := range p.config.Tests {
+	for _, path := range p.config.Scripts {
 		if _, err := os.Stat(path); err != nil {
 			errs = packer.MultiErrorAppend(errs,
-				fmt.Errorf("Bad test '%s': %s", path, err))
+				fmt.Errorf("bad script '%s': %s", path, err))
 		}
 	}
 
@@ -159,55 +153,46 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	return nil
 }
 
-// Provision runs the Goss Provisioner
-func (p *Provisioner) Provision(_ context.Context, ui packer.Ui, comm packer.Communicator) error {
-	ui.Say("Provisioning with Goss")
+// Provision runs the Deno Provisioner.
+func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
+	ui.Say("Provisioning with Deno")
 
 	if !p.config.SkipInstall {
-		if err := p.installGoss(ui, comm); err != nil {
+		if err := p.installDeno(ctx, ui, comm); err != nil {
 			return fmt.Errorf("Error installing Goss: %s", err)
 		}
 	} else {
-		ui.Message("Skipping Goss installation")
+		ui.Message("Skipping Deno installation")
 	}
 
-	ui.Say("Uploading goss tests...")
-	if err := p.createDir(ui, comm, p.config.RemotePath); err != nil {
-		return fmt.Errorf("Error creating remote directory: %s", err)
+	// TODO: compile deno bundles locally, before upload
+	// Once built in bundling is available, this will become a lot easier:
+	// https://github.com/denoland/deno/issues/2357
+
+	ui.Say("Uploading deno scripts...")
+	if err := p.createDir(ctx, ui, comm, p.config.RemotePath); err != nil {
+		return fmt.Errorf("error creating remote directory: %s", err)
 	}
 
-	if p.config.VarsFile != "" {
-		vf, err := os.Stat(p.config.VarsFile)
-		if err != nil {
-			return fmt.Errorf("Error stating file: %s", err)
-		}
-		if vf.Mode().IsRegular() {
-			ui.Message(fmt.Sprintf("Uploading vars file %s", p.config.VarsFile))
-			varsDest := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(p.config.VarsFile)))
-			if err := p.uploadFile(ui, comm, varsDest, p.config.VarsFile); err != nil {
-				return fmt.Errorf("Error uploading vars file: %s", err)
-			}
-		}
-	}
-
-	for _, src := range p.config.Tests {
+	for _, src := range p.config.Scripts {
 		s, err := os.Stat(src)
 		if err != nil {
-			return fmt.Errorf("Error stating file: %s", err)
+			return fmt.Errorf("stat error: %s", err)
 		}
 
 		if s.Mode().IsRegular() {
 			ui.Message(fmt.Sprintf("Uploading %s", src))
 			dst := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(src)))
-			if err := p.uploadFile(ui, comm, dst, src); err != nil {
-				return fmt.Errorf("Error uploading goss test: %s", err)
+			if err := p.uploadFile(ctx, ui, comm, dst, src); err != nil {
+				return fmt.Errorf("error uploading deno script: %s", err)
 			}
 		} else if s.Mode().IsDir() {
-			ui.Message(fmt.Sprintf("Uploading Dir %s", src))
-			dst := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(src)))
-			if err := p.uploadDir(ui, comm, dst, src); err != nil {
-				return fmt.Errorf("Error uploading goss test: %s", err)
-			}
+			return fmt.Errorf("%s is a directory", src)
+			//ui.Message(fmt.Sprintf("Uploading Dir %s", src))
+			//dst := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(src)))
+			//if err := p.uploadDir(ui, comm, dst, src); err != nil {
+			//	return fmt.Errorf("error uploading deno script: %s", err)
+			//}
 		} else {
 			ui.Message(fmt.Sprintf("Ignoring %s... not a regular file", src))
 		}
@@ -215,7 +200,7 @@ func (p *Provisioner) Provision(_ context.Context, ui packer.Ui, comm packer.Com
 
 	ui.Say("Running goss tests...")
 	if err := p.runGoss(ui, comm); err != nil {
-		return fmt.Errorf("Error running Goss: %s", err)
+		return fmt.Errorf("error running deno: %s", err)
 	}
 
 	return nil
@@ -226,28 +211,39 @@ func (p *Provisioner) Cancel() {
 	os.Exit(0)
 }
 
-// installGoss downloads the Goss binary on the remote host
-func (p *Provisioner) installGoss(ui packer.Ui, comm packer.Communicator) error {
-	ui.Message(fmt.Sprintf("Installing Goss from, %s", p.config.URL))
+// installDeno installs deno on the remote host.
+func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
+	ui.Message(fmt.Sprintf("Installing deno"))
 
-	cmd := &packer.RemoteCmd{
+	// Command to emulate:
+	// curl -fsSL https://deno.land/x/install/install.sh | sh
+	bootstrapURL := "https://deno.land/x/install/install.sh"
+	cmd := packer.RemoteCmd{
 		// Fallback on wget if curl failed for any reason (such as not being installed)
 		Command: fmt.Sprintf(
 			"curl -L %s %s -o %s %s || wget %s %s -O %s %s",
-			p.sslFlag("curl"), p.userPass("curl"), p.config.DownloadPath, p.config.URL,
-			p.sslFlag("wget"), p.userPass("wget"), p.config.DownloadPath, p.config.URL),
+			p.sslFlag("curl"), p.userPass("curl"), p.config.DownloadPath, bootstrapURL,
+			p.sslFlag("wget"), p.userPass("wget"), p.config.DownloadPath, bootstrapURL),
 	}
-	ui.Message(fmt.Sprintf("Downloading Goss to %s", p.config.DownloadPath))
-	//if err := cmd.StartWithUi(comm, ui); err != nil {
-	//	return fmt.Errorf("Unable to download Goss: %s", err)
-	//}
-	//cmd = &packer.RemoteCmd{
-	//	Command: fmt.Sprintf("chmod 555 %s && %s --version", p.config.DownloadPath, p.config.DownloadPath),
-	//}
-	comm.Start(context.TODO(), cmd)
-	//if err := cmd.StartWithUi(comm, ui); err != nil {
-	//	return fmt.Errorf("Unable to install Goss: %s", err)
-	//}
+	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
+	if err := comm.Start(ctx, &cmd); err != nil {
+		return fmt.Errorf("installer script download: %v", err)
+	}
+	cmd.Wait()
+	if cmd.ExitStatus() != 0 {
+		return fmt.Errorf("downloading installer script: non-zero exit status")
+	}
+
+	cmd = packer.RemoteCmd{
+		Command: fmt.Sprintf("sh -c '%s'", p.config.DownloadPath),
+	}
+	if err := comm.Start(ctx, &cmd); err != nil {
+		return fmt.Errorf("installer script execute: %v", err)
+	}
+	cmd.Wait()
+	if cmd.ExitStatus() != 0 {
+		return fmt.Errorf("installer script execute: non-zero exit status")
+	}
 
 	return nil
 }
@@ -281,13 +277,6 @@ func (p *Provisioner) debug() string {
 func (p *Provisioner) format() string {
 	if p.config.Format != "" {
 		return fmt.Sprintf("-f %s", p.config.Format)
-	}
-	return ""
-}
-
-func (p *Provisioner) vars() string {
-	if p.config.VarsFile != "" {
-		return fmt.Sprintf("--vars %s", filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(p.config.VarsFile))))
 	}
 	return ""
 }
@@ -336,38 +325,43 @@ func (p *Provisioner) userPass(cmdType string) string {
 }
 
 // createDir creates a directory on the remote server
-func (p *Provisioner) createDir(ui packer.Ui, comm packer.Communicator, dir string) error {
-	//ui.Message(fmt.Sprintf("Creating directory: %s", dir))
-	//cmd := &packer.RemoteCmd{
-	//	Command: fmt.Sprintf("mkdir -p '%s'", dir),
-	//}
-	//if err := cmd.StartWithUi(comm, ui); err != nil {
-	//	return err
-	//}
-	//if cmd.ExitStatus != 0 {
-	//	return fmt.Errorf("non-zero exit status")
-	//}
+func (p *Provisioner) createDir(ctx context.Context, ui packer.Ui, comm packer.Communicator, dir string) error {
+	ui.Message(fmt.Sprintf("Creating directory: %s", dir))
+	cmd := packer.RemoteCmd{
+		Command: fmt.Sprintf("mkdir -p '%s'", dir),
+	}
+
+	if err := comm.Start(ctx, &cmd); err != nil {
+		return err
+	}
+
+	cmd.Wait()
+
+	if cmd.ExitStatus() != 0 {
+		return fmt.Errorf("creating dir: non-zero exit status")
+	}
 	return nil
 }
 
-// uploadFile uploads a file
-func (p *Provisioner) uploadFile(ui packer.Ui, comm packer.Communicator, dst, src string) error {
+// uploadFile uploads a file.
+func (p *Provisioner) uploadFile(ctx context.Context, ui packer.Ui, comm packer.Communicator, dst, src string) error {
 	f, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("Error opening: %s", err)
+		return fmt.Errorf("error opening: %s", err)
 	}
-	defer f.Close()
-
 	if err = comm.Upload(dst, f, nil); err != nil {
-		return fmt.Errorf("Error uploading %s: %s", src, err)
+		return fmt.Errorf("error uploading %s: %s", src, err)
+	}
+	if err := f.Close(); err != nil {
+		return err
 	}
 	return nil
 }
 
 // uploadDir uploads a directory
-func (p *Provisioner) uploadDir(ui packer.Ui, comm packer.Communicator, dst, src string) error {
+func (p *Provisioner) uploadDir(ctx context.Context, ui packer.Ui, comm packer.Communicator, dst, src string) error {
 	var ignore []string
-	if err := p.createDir(ui, comm, dst); err != nil {
+	if err := p.createDir(ctx, ui, comm, dst); err != nil {
 		return err
 	}
 
