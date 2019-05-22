@@ -1,0 +1,19 @@
+{
+    "builders":[{
+        "type": "docker",
+        "image": "ubuntu",
+        "export_path": "image.tar"
+    }],
+    "provisioners":[
+        {
+            "type": "deno"
+        }
+    ],
+    "post-processors": [
+        {
+            "type": "docker-import",
+            "repository": "anxiousmodernman/packer-provisioner-deno",
+            "tag": "0.1"
+        }
+    ]
+}
