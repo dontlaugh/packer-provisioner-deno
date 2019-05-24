@@ -13,3 +13,14 @@ $HOME/.packer.d/plugins
 ```
 
 You may need to create the plugins directory
+
+
+## Tests
+
+Packer has a docker `builder`. This is a convenient way to test without launching
+a cloud vm.
+
+```
+cd examples
+packer build docker.json
+```
