@@ -1,5 +1,6 @@
 
 async function main() {
+    // Make a user for Carlos
     let opts = {
         args: ["useradd", "carlos"]
     };

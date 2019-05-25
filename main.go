@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -15,56 +13,26 @@ import (
 	"github.com/hashicorp/packer/template/interpolate"
 )
 
-// GossConfig holds the config data coming in from the packer template
-type GossConfig struct {
-	// Deno version to download; NOTE: currently only the latest is available
-	Version string
-	// Deno arch; NOTE: currently only amd64 is supported
-	Arch string
+// DenoConfig maps the config data from the Packer provisioner stanza.
+type DenoConfig struct {
 
-	// DownloadPath is the target location for the installer script right now, but should
-	// eventually be our target location for deno installation itself.
-	DownloadPath string
 	Username     string
 	Password     string
 	SkipInstall  bool
 
-	// Enable debug for goss (defaults to false)
-	Debug bool
+	// The destination folder for uploaded Deno scripts.
+	RemoteFolder string `mapstructure:"remote_folder"`
 
 	// A slice of scripts to compile and run.
 	Scripts []string
 
-	// Use Sudo
-	UseSudo bool `mapstructure:"use_sudo"`
-
-	// skip ssl check flag
-	SkipSSLChk bool `mapstructure:"skip_ssl"`
-
-	// The --gossfile flag
-	GossFile string `mapstructure:"goss_file"`
-
-	// The remote folder where the goss tests will be uploaded to.
-	// This should be set to a pre-existing directory, it defaults to /tmp
-	RemoteFolder string `mapstructure:"remote_folder"`
-
-	// The remote path where the goss tests will be uploaded.
-	// This defaults to remote_folder/goss
-	RemotePath string `mapstructure:"remote_path"`
-
-	// The format to use for test output
-	// Available: [documentation json json_oneline junit nagios nagios_verbose rspecish silent tap]
-	// Default:   rspecish
-	Format string `mapstructure:"format"`
-
 	ctx interpolate.Context
 }
 
-var validFormats = []string{"documentation", "json", "json_oneline", "junit", "nagios", "nagios_verbose", "rspecish", "silent", "tap"}
 
-// Provisioner implements a packer Provisioner
+// Provisioner implements a Packer Provisioner
 type Provisioner struct {
-	config GossConfig
+	config DenoConfig
 }
 
 func main() {
@@ -92,49 +60,16 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		return err
 	}
 
-	if p.config.Version == "" {
-		p.config.Version = "0.6.0"
-	}
-
-	if p.config.Arch == "" {
-		p.config.Arch = "amd64"
-	}
-
-	if p.config.DownloadPath == "" {
-		p.config.DownloadPath = fmt.Sprintf("/tmp/deno")
-	}
-
+	// TODO pick a better place?
 	if p.config.RemoteFolder == "" {
-		p.config.RemoteFolder = "/tmp"
-	}
-
-	if p.config.RemotePath == "" {
-		p.config.RemotePath = fmt.Sprintf("%s/.deno", p.config.RemoteFolder)
+		p.config.RemoteFolder = "/tmp/packer-deno"
 	}
 
 	if p.config.Scripts == nil {
 		p.config.Scripts = make([]string, 0)
 	}
 
-	if p.config.GossFile != "" {
-		p.config.GossFile = fmt.Sprintf("--gossfile %s", p.config.GossFile)
-	}
-
 	var errs *packer.MultiError
-	if p.config.Format != "" {
-		valid := false
-		for _, candidate := range validFormats {
-			if p.config.Format == candidate {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			errs = packer.MultiErrorAppend(errs,
-				fmt.Errorf("Invalid format choice %s. Valid options: %v",
-					p.config.Format, validFormats))
-		}
-	}
 
 	if len(p.config.Scripts) == 0 {
 		errs = packer.MultiErrorAppend(errs,
@@ -168,11 +103,11 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 	}
 
 	// TODO: compile deno bundles locally, before upload
-	// Once built in bundling is available, this will become a lot easier:
+	// Once built-in bundling is available, this will become a lot easier:
 	// https://github.com/denoland/deno/issues/2357
 
 	ui.Say("Uploading deno scripts...")
-	if err := p.createDir(ctx, ui, comm, p.config.RemotePath); err != nil {
+	if err := p.createDir(ctx, ui, comm, p.config.RemoteFolder); err != nil {
 		return fmt.Errorf("error creating remote directory: %s", err)
 	}
 
@@ -184,24 +119,19 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 
 		if s.Mode().IsRegular() {
 			ui.Message(fmt.Sprintf("Uploading %s", src))
-			dst := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(src)))
+			dst := filepath.ToSlash(filepath.Join(p.config.RemoteFolder, filepath.Base(src)))
 			if err := p.uploadFile(ctx, ui, comm, dst, src); err != nil {
 				return fmt.Errorf("error uploading deno script: %s", err)
 			}
 		} else if s.Mode().IsDir() {
-			return fmt.Errorf("%s is a directory", src)
-			//ui.Message(fmt.Sprintf("Uploading Dir %s", src))
-			//dst := filepath.ToSlash(filepath.Join(p.config.RemotePath, filepath.Base(src)))
-			//if err := p.uploadDir(ui, comm, dst, src); err != nil {
-			//	return fmt.Errorf("error uploading deno script: %s", err)
-			//}
+			return fmt.Errorf("%s is a directory, expected deno script", src)
 		} else {
-			ui.Message(fmt.Sprintf("Ignoring %s... not a regular file", src))
+			return fmt.Errorf("%s is not a regular file", src)
 		}
 	}
 
-	ui.Say("Running goss tests...")
-	if err := p.runGoss(ui, comm); err != nil {
+	ui.Say("Running provisioning scripts")
+	if err := p.runDeno(ui, comm); err != nil {
 		return fmt.Errorf("error running deno: %s", err)
 	}
 
@@ -213,46 +143,29 @@ func (p *Provisioner) Cancel() {
 	os.Exit(0)
 }
 
-// installDeno installs deno on the remote host.
+// installDeno installs deno on the remote host using the public installer script.
 func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
 
 	var cmd packer.RemoteCmd
-	cmd = packer.RemoteCmd{
-		Command: "apt-get update",
+	cmd = packer.RemoteCmd{Command: "apt-get update"}
+	ui.Message("Update package cache")
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "update package cache"); err != nil {
+		return err
 	}
+
+	// TODO: handle other systems when deno binaries for them are available
+	cmd = packer.RemoteCmd{Command: "apt-get install -y curl"}
 	ui.Message("Installing curl")
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installing curl"); err != nil {
 		return err
 	}
 
-	cmd = packer.RemoteCmd{
-		Command: "apt-get install -y curl",
-	}
-	ui.Message("Installing curl")
-	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installing curl"); err != nil {
-		return err
-	}
-
-	// Command to emulate:
-	// curl -fsSL https://deno.land/x/install/install.sh | sh
 	bootstrapURL := "https://deno.land/x/install/install.sh"
-	cmd = packer.RemoteCmd{
-		//Command: fmt.Sprintf("curl %s --output %s", bootstrapURL, p.config.DownloadPath),
-		//Command: fmt.Sprintf("curl -L curl -o %s %s", p.config.DownloadPath, bootstrapURL),
-		Command: fmt.Sprintf("curl -fsSL %s | sh", bootstrapURL),
-	}
-	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
-	if err := execRemoteCommand(ctx, comm, &cmd, ui, "downloading installer script"); err != nil {
+	cmd = packer.RemoteCmd{Command: fmt.Sprintf("curl -fsSL %s | sh", bootstrapURL)}
+	ui.Message("Downloading and executing deno installer script" )
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installer script"); err != nil {
 		return err
 	}
-	//&& sh -c '%s'
-	//cmd = packer.RemoteCmd{
-	//	Command: fmt.Sprintf("chmod +x %s", p.config.DownloadPath),
-	//}
-	//
-	//if err := execRemoteCommand(ctx, comm, &cmd, ui, "executing installer script"); err != nil {
-	//	return err
-	//}
 
 	return nil
 }
@@ -267,16 +180,8 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 	return nil
 }
 
-func printReader(r io.Reader) string {
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
-}
-
-// runGoss runs the Goss tests
-func (p *Provisioner) runGoss(ui packer.Ui, comm packer.Communicator) error {
+// runDeno runs deno with our uploaded scripts
+func (p *Provisioner) runDeno(ui packer.Ui, comm packer.Communicator) error {
 	//goss := fmt.Sprintf("%s", p.config.DownloadPath)
 	//cmd := &packer.RemoteCmd{
 	//	Command: fmt.Sprintf(
@@ -291,29 +196,6 @@ func (p *Provisioner) runGoss(ui packer.Ui, comm packer.Communicator) error {
 	//}
 	//ui.Say(fmt.Sprintf("Goss tests ran successfully"))
 	return nil
-}
-
-// debug returns the debug flag if debug is configured
-func (p *Provisioner) debug() string {
-	if p.config.Debug {
-		return "-d"
-	}
-	return ""
-}
-
-func (p *Provisioner) format() string {
-	if p.config.Format != "" {
-		return fmt.Sprintf("-f %s", p.config.Format)
-	}
-	return ""
-}
-
-// enable sudo if required
-func (p *Provisioner) enableSudo() string {
-	if p.config.UseSudo {
-		return "sudo"
-	}
-	return ""
 }
 
 // createDir creates a directory on the remote server
