@@ -30,8 +30,9 @@ You may need to create the plugins directory.
 
 ## Development and Tests
 
-You will need a non-ancient version of Go, and **$GOPATH/bin** should be on your
-PATH. That's **$HOME/go/bin** by default, but can vary depending on your setup.
+You will need Go 1.11 or later with `export GO111MODULE=on` for module support.
+**$GOPATH/bin** should be on your PATH. That's **$HOME/go/bin** by default, but
+can vary depending on your setup.
 
 If you want to hack, make a symlink from **$GOPATH/bin/packer-provisioner-deno**
 to the packer plugins directory. Something like this should work, after an
