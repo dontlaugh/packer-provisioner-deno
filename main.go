@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -238,13 +237,7 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 	// curl -fsSL https://deno.land/x/install/install.sh | sh
 	bootstrapURL := "https://deno.land/x/install/install.sh"
 	cmd = packer.RemoteCmd{
-		// Fallback on wget if curl failed for any reason (such as not being installed)
-		Command: fmt.Sprintf(
-			"curl -L %s %s -o %s %s || wget %s %s -O %s %s",
-			p.sslFlag("curl"), "curl", p.config.DownloadPath, bootstrapURL,
-			p.sslFlag("wget"), "wget", p.config.DownloadPath, bootstrapURL),
-		Stdout: bytes.NewBuffer([]byte(``)),
-		Stderr: bytes.NewBuffer([]byte(``)),
+		Command: fmt.Sprintf("curl -L %s -o %s %s", "curl", p.config.DownloadPath, bootstrapURL),
 	}
 	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
 	if err := execRemoteCommand(ctx, comm, &cmd, ui,"downloading installer script"); err != nil {
@@ -266,9 +259,6 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 	if err := cmd.RunWithUi(ctx, comm, ui); err != nil {
 		return fmt.Errorf("error %s: %v",msg,  err)
 	}
-	//if err := comm.Start(ctx, cmd); err != nil {
-	//	return fmt.Errorf("error %s: %v",msg,  err)
-	//}
 	if code := cmd.ExitStatus(); code != 0 {
 		return fmt.Errorf("%s non-zero exit status: %v", msg, code)
 	}
@@ -314,20 +304,6 @@ func (p *Provisioner) debug() string {
 func (p *Provisioner) format() string {
 	if p.config.Format != "" {
 		return fmt.Sprintf("-f %s", p.config.Format)
-	}
-	return ""
-}
-
-func (p *Provisioner) sslFlag(cmdType string) string {
-	if p.config.SkipSSLChk {
-		switch(cmdType) {
-		case "curl":
-			return "-k"
-		case "wget":
-			return "--no-check-certificate"
-		default:
-			return ""
-		}
 	}
 	return ""
 }
