@@ -189,19 +189,12 @@ func (p *Provisioner) runDeno(ui packer.Ui, comm packer.Communicator) error {
 // createDir creates a directory on the remote server
 func (p *Provisioner) createDir(ctx context.Context, ui packer.Ui, comm packer.Communicator, dir string) error {
 	ui.Message(fmt.Sprintf("Creating directory: %s", dir))
-	cmd := packer.RemoteCmd{
-		Command: fmt.Sprintf("mkdir -p '%s'", dir),
-	}
+	cmd := packer.RemoteCmd{Command: fmt.Sprintf("mkdir -p '%s'", dir)}
 
-	if err := comm.Start(ctx, &cmd); err != nil {
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "create dir"); err != nil {
 		return err
 	}
 
-	cmd.Wait()
-
-	if cmd.ExitStatus() != 0 {
-		return fmt.Errorf("creating dir: non-zero exit status")
-	}
 	return nil
 }
 
@@ -227,6 +220,7 @@ func (p *Provisioner) uploadDir(ctx context.Context, ui packer.Ui, comm packer.C
 		return err
 	}
 
+	// TODO: support Windows '\'
 	if src[len(src)-1] != '/' {
 		src = src + "/"
 	}
