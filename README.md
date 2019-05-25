@@ -11,9 +11,10 @@ We want to accomplish the following
 
 - [x] Install deno onto target system
 - [x] Upload individual deno scripts
-- [ ] Execute individual deno scripts as root
+- [x] Execute individual deno scripts as root
 - [ ] Manually bundle scripts locally and upload those, instead. Or, [wait for this feature](https://github.com/denoland/deno/issues/2357).
 - [ ] Execute scripts as non-root user
+- [ ] Specify sandboxing flags in the packer config (`--allow-net` and friends; we run with `-A` right now)
 - [ ] Global system install of deno outside any user's HOME
 - [ ] Add a DigitalOcean cloud builder test
 

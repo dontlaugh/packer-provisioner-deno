@@ -26,6 +26,9 @@ type DenoConfig struct {
 	// A slice of scripts to compile and run.
 	Scripts []string
 
+	// path to the deno executable
+	denoExecutable string
+
 	ctx interpolate.Context
 }
 
@@ -69,6 +72,9 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		p.config.Scripts = make([]string, 0)
 	}
 
+	// TODO find a way to install deno to different places/users/globally
+	p.config.denoExecutable = "/root/.deno/bin/deno"
+
 	var errs *packer.MultiError
 
 	if len(p.config.Scripts) == 0 {
@@ -111,6 +117,8 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		return fmt.Errorf("error creating remote directory: %s", err)
 	}
 
+	var remoteScripts []string
+
 	for _, src := range p.config.Scripts {
 		s, err := os.Stat(src)
 		if err != nil {
@@ -123,6 +131,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 			if err := p.uploadFile(ctx, ui, comm, dst, src); err != nil {
 				return fmt.Errorf("error uploading deno script: %s", err)
 			}
+			remoteScripts = append(remoteScripts, dst)
 		} else if s.Mode().IsDir() {
 			return fmt.Errorf("%s is a directory, expected deno script", src)
 		} else {
@@ -131,8 +140,10 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 	}
 
 	ui.Say("Running provisioning scripts")
-	if err := p.runDeno(ui, comm); err != nil {
-		return fmt.Errorf("error running deno: %s", err)
+	for _, script := range remoteScripts {
+		if err := p.runDeno(ctx, ui, comm, script); err != nil {
+			return fmt.Errorf("error running deno: %s", err)
+		}
 	}
 
 	return nil
@@ -181,8 +192,13 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 }
 
 // runDeno runs deno with our uploaded scripts
-func (p *Provisioner) runDeno(ui packer.Ui, comm packer.Communicator) error {
-    // TODO
+func (p *Provisioner) runDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator, scriptPath string) error {
+	commandString := fmt.Sprintf("%s run -A %s", p.config.denoExecutable, scriptPath)
+	cmd := packer.RemoteCmd{
+		Command: commandString}
+    if err := execRemoteCommand(ctx, comm, &cmd, ui, commandString); err != nil {
+    	return err
+	}
 	return nil
 }
 

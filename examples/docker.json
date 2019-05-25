@@ -10,7 +10,8 @@
     {
       "type": "deno",
       "scripts": [
-        "deno-scripts/makeuser.ts"
+        "deno-scripts/makeuser.ts",
+        "deno-scripts/install-nginx.ts"
       ]
     }
   ],
