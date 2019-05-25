@@ -237,15 +237,16 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 	// curl -fsSL https://deno.land/x/install/install.sh | sh
 	bootstrapURL := "https://deno.land/x/install/install.sh"
 	cmd = packer.RemoteCmd{
-		Command: fmt.Sprintf("curl -L %s -o %s %s", "curl", p.config.DownloadPath, bootstrapURL),
+		Command: fmt.Sprintf("curl -L curl -o %s %s", p.config.DownloadPath, bootstrapURL),
+		//Command: fmt.Sprintf("curl -L %s -o %s %s", "curl", p.config.DownloadPath, bootstrapURL),
 	}
 	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
 	if err := execRemoteCommand(ctx, comm, &cmd, ui,"downloading installer script"); err != nil {
 		return err
 	}
-
+//&& sh -c '%s'
 	cmd = packer.RemoteCmd{
-		Command: fmt.Sprintf("sh -c '%s'", p.config.DownloadPath),
+		Command: fmt.Sprintf("chmod +x %s", p.config.DownloadPath),
 	}
 
 	if err := execRemoteCommand(ctx, comm, &cmd, ui,"executing installer script"); err != nil {
