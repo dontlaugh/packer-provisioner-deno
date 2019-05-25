@@ -7,8 +7,8 @@ we are only testing on Ubuntu docker containers right now.
 
 TODO
 
-- [*] Install deno onto target system
-- [*] Upload individual deno scripts
+- [x] Install deno onto target system
+- [x] Upload individual deno scripts
 - [ ] Execute individual deno scripts
 - [ ] Manually bundle scripts locally and upload those, instead. Or, [wait for this feature](https://github.com/denoland/deno/issues/2357).
 - [ ] Add a DigitalOcean cloud builder test
