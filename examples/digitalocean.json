@@ -1,0 +1,22 @@
+{
+  "builders": [
+    {
+      "type": "digitalocean",
+      "image": "ubuntu-18-04-x64",
+      "region": "nyc3",
+      "size": "s-2vcpu-2gb",
+      "ssh_username": "root"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "deno",
+      "skip_provision": false,
+      "remote_folder": "/root/packer-deno",
+      "scripts": [
+        "deno-scripts/makeuser.ts",
+        "deno-scripts/install-nginx.ts"
+      ]
+    }
+  ]
+}

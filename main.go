@@ -15,10 +15,11 @@ import (
 
 // DenoConfig maps the config data from the Packer provisioner stanza.
 type DenoConfig struct {
-
-	Username     string
-	Password     string
-	SkipInstall  bool
+	Username    string
+	Password    string
+	SkipInstall bool
+	// For testing purposes, we can skip provisioning and just look at how deno was installed
+	SkipProvision bool `mapstructure:"skip_provision"`
 
 	// The destination folder for uploaded Deno scripts.
 	RemoteFolder string `mapstructure:"remote_folder"`
@@ -31,7 +32,6 @@ type DenoConfig struct {
 
 	ctx interpolate.Context
 }
-
 
 // Provisioner implements a Packer Provisioner
 type Provisioner struct {
@@ -63,7 +63,6 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		return err
 	}
 
-	// TODO pick a better place?
 	if p.config.RemoteFolder == "" {
 		p.config.RemoteFolder = "/tmp/packer-deno"
 	}
@@ -138,12 +137,16 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 			return fmt.Errorf("%s is not a regular file", src)
 		}
 	}
+	if !p.config.SkipProvision {
 
-	ui.Say("Running provisioning scripts")
-	for _, script := range remoteScripts {
-		if err := p.runDeno(ctx, ui, comm, script); err != nil {
-			return fmt.Errorf("error running deno: %s", err)
+		ui.Say("Running provisioning scripts")
+		for _, script := range remoteScripts {
+			if err := p.runDeno(ctx, ui, comm, script); err != nil {
+				return fmt.Errorf("error running deno: %s", err)
+			}
 		}
+	} else {
+		ui.Say("Skipping provisioning scripts")
 	}
 
 	return nil
@@ -173,7 +176,7 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 
 	bootstrapURL := "https://deno.land/x/install/install.sh"
 	cmd = packer.RemoteCmd{Command: fmt.Sprintf("curl -fsSL %s | sh", bootstrapURL)}
-	ui.Message("Downloading and executing deno installer script" )
+	ui.Message("Downloading and executing deno installer script")
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installer script"); err != nil {
 		return err
 	}
@@ -196,8 +199,8 @@ func (p *Provisioner) runDeno(ctx context.Context, ui packer.Ui, comm packer.Com
 	commandString := fmt.Sprintf("%s run -A %s", p.config.denoExecutable, scriptPath)
 	cmd := packer.RemoteCmd{
 		Command: commandString}
-    if err := execRemoteCommand(ctx, comm, &cmd, ui, commandString); err != nil {
-    	return err
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, commandString); err != nil {
+		return err
 	}
 	return nil
 }

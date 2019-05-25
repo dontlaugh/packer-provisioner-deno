@@ -7,7 +7,7 @@ we are only testing on Ubuntu docker containers right now.
 
 ## TODO
 
-We want to accomplish the following 
+We want to accomplish the following
 
 - [x] Install deno onto target system
 - [x] Upload individual deno scripts
@@ -16,7 +16,8 @@ We want to accomplish the following
 - [ ] Execute scripts as non-root user
 - [ ] Specify sandboxing flags in the packer config (`--allow-net` and friends; we run with `-A` right now)
 - [ ] Global system install of deno outside any user's HOME
-- [ ] Add a DigitalOcean cloud builder test
+- [x] Add a DigitalOcean cloud builder test
+- [ ] Specify alternative install command (for test deno builds)
 
 ## Installation
 
