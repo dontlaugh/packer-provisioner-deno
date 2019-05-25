@@ -182,19 +182,7 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 
 // runDeno runs deno with our uploaded scripts
 func (p *Provisioner) runDeno(ui packer.Ui, comm packer.Communicator) error {
-	//goss := fmt.Sprintf("%s", p.config.DownloadPath)
-	//cmd := &packer.RemoteCmd{
-	//	Command: fmt.Sprintf(
-	//		"cd %s && %s %s %s %s %s validate %s",
-	//		p.config.RemotePath, p.enableSudo(), goss, p.config.GossFile, p.vars(), p.debug(), p.format()),
-	//}
-	//if err := cmd.StartWithUi(comm, ui); err != nil {
-	//	return err
-	//}
-	//if cmd.ExitStatus != 0 {
-	//	return fmt.Errorf("goss non-zero exit status")
-	//}
-	//ui.Say(fmt.Sprintf("Goss tests ran successfully"))
+    // TODO
 	return nil
 }
 

@@ -7,12 +7,14 @@ we are only testing on Ubuntu docker containers right now.
 
 ## TODO
 
-This plugin should be able to
+We want to accomplish the following 
 
 - [x] Install deno onto target system
 - [x] Upload individual deno scripts
-- [ ] Execute individual deno scripts
+- [ ] Execute individual deno scripts as root
 - [ ] Manually bundle scripts locally and upload those, instead. Or, [wait for this feature](https://github.com/denoland/deno/issues/2357).
+- [ ] Execute scripts as non-root user
+- [ ] Global system install of deno outside any user's HOME
 - [ ] Add a DigitalOcean cloud builder test
 
 ## Installation
