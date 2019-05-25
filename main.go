@@ -18,9 +18,9 @@ import (
 // GossConfig holds the config data coming in from the packer template
 type GossConfig struct {
 	// Deno version to download; NOTE: currently only the latest is available
-	Version      string
+	Version string
 	// Deno arch; NOTE: currently only amd64 is supported
-	Arch         string
+	Arch string
 
 	// DownloadPath is the target location for the installer script right now, but should
 	// eventually be our target location for deno installation itself.
@@ -39,7 +39,7 @@ type GossConfig struct {
 	UseSudo bool `mapstructure:"use_sudo"`
 
 	// skip ssl check flag
-	SkipSSLChk   bool `mapstructure:"skip_ssl"`
+	SkipSSLChk bool `mapstructure:"skip_ssl"`
 
 	// The --gossfile flag
 	GossFile string `mapstructure:"goss_file"`
@@ -229,36 +229,37 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 		Command: "apt-get install -y curl",
 	}
 	ui.Message("Installing curl")
-    if err := execRemoteCommand(ctx, comm, &cmd, ui, "installing curl"); err != nil {
-    	return err
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installing curl"); err != nil {
+		return err
 	}
 
 	// Command to emulate:
 	// curl -fsSL https://deno.land/x/install/install.sh | sh
 	bootstrapURL := "https://deno.land/x/install/install.sh"
 	cmd = packer.RemoteCmd{
-		Command: fmt.Sprintf("curl -L curl -o %s %s", p.config.DownloadPath, bootstrapURL),
-		//Command: fmt.Sprintf("curl -L %s -o %s %s", "curl", p.config.DownloadPath, bootstrapURL),
+		//Command: fmt.Sprintf("curl %s --output %s", bootstrapURL, p.config.DownloadPath),
+		//Command: fmt.Sprintf("curl -L curl -o %s %s", p.config.DownloadPath, bootstrapURL),
+		Command: fmt.Sprintf("curl -fsSL %s | sh", bootstrapURL),
 	}
 	ui.Message(fmt.Sprintf("Downloading deno installer script to %s", p.config.DownloadPath))
-	if err := execRemoteCommand(ctx, comm, &cmd, ui,"downloading installer script"); err != nil {
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "downloading installer script"); err != nil {
 		return err
 	}
-//&& sh -c '%s'
-	cmd = packer.RemoteCmd{
-		Command: fmt.Sprintf("chmod +x %s", p.config.DownloadPath),
-	}
-
-	if err := execRemoteCommand(ctx, comm, &cmd, ui,"executing installer script"); err != nil {
-		return err
-	}
+	//&& sh -c '%s'
+	//cmd = packer.RemoteCmd{
+	//	Command: fmt.Sprintf("chmod +x %s", p.config.DownloadPath),
+	//}
+	//
+	//if err := execRemoteCommand(ctx, comm, &cmd, ui, "executing installer script"); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
 
 func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packer.RemoteCmd, ui packer.Ui, msg string) error {
 	if err := cmd.RunWithUi(ctx, comm, ui); err != nil {
-		return fmt.Errorf("error %s: %v",msg,  err)
+		return fmt.Errorf("error %s: %v", msg, err)
 	}
 	if code := cmd.ExitStatus(); code != 0 {
 		return fmt.Errorf("%s non-zero exit status: %v", msg, code)
@@ -273,8 +274,6 @@ func printReader(r io.Reader) string {
 	}
 	return string(b)
 }
-
-
 
 // runGoss runs the Goss tests
 func (p *Provisioner) runGoss(ui packer.Ui, comm packer.Communicator) error {
