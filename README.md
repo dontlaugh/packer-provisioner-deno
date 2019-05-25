@@ -17,7 +17,9 @@ We want to accomplish the following
 - [ ] Specify sandboxing flags in the packer config (`--allow-net` and friends; we run with `-A` right now)
 - [ ] Global system install of deno outside any user's HOME
 - [x] Add a DigitalOcean cloud builder test
-- [ ] Specify alternative install command (for test deno builds)
+- [ ] Add a Vagrant builder test
+- [ ] Specify alternative install command (for test deno builds fetchable from network)
+- [ ] Allow uploading local deno builds easily (for testing local dev builds)
 
 ## Installation
 
