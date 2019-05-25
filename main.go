@@ -15,9 +15,17 @@ import (
 
 // DenoConfig maps the config data from the Packer provisioner stanza.
 type DenoConfig struct {
-	Username    string
-	Password    string
+	// Username and Password currently unused, but may be required for Communicator config
+	Username string
+	Password string
+
+	// A fully qualified path. If set, upload a local deno build to
+	// RemoteFolder instead of using an install command/script.
+	LocalDenoBin string `mapstructure:"local_deno_bin"`
+
+	// If true, do not install Deno on remote target. Assume it is already there.
 	SkipInstall bool
+
 	// For testing purposes, we can skip provisioning and just look at how deno was installed
 	SkipProvision bool `mapstructure:"skip_provision"`
 
@@ -27,7 +35,7 @@ type DenoConfig struct {
 	// A slice of scripts to compile and run.
 	Scripts []string
 
-	// path to the deno executable
+	// Path to the deno executable on the remote target; TODO make configurable
 	denoExecutable string
 
 	ctx interpolate.Context
@@ -71,10 +79,25 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		p.config.Scripts = make([]string, 0)
 	}
 
+	var errs *packer.MultiError
+
+	if p.config.LocalDenoBin != "" {
+		if _, err := os.Stat(p.config.LocalDenoBin); err != nil {
+			errs = packer.MultiErrorAppend(errs,
+				fmt.Errorf("bad path to local deno binary '%s': %s", p.config.LocalDenoBin, err))
+		}
+		if p.config.SkipInstall {
+			errs = packer.MultiErrorAppend(errs,
+				errors.New("if local_deno_bin is set, skip_install cannot be true"))
+		}
+	}
+
 	// TODO find a way to install deno to different places/users/globally
 	p.config.denoExecutable = "/root/.deno/bin/deno"
-
-	var errs *packer.MultiError
+	if !filepath.IsAbs(p.config.denoExecutable) {
+		errs = packer.MultiErrorAppend(errs,
+			errors.New("remote target denoExecutable must be an absolute path"))
+	}
 
 	if len(p.config.Scripts) == 0 {
 		errs = packer.MultiErrorAppend(errs,
@@ -100,9 +123,16 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 	ui.Say("Provisioning with Deno")
 
 	if !p.config.SkipInstall {
-		if err := p.installDeno(ctx, ui, comm); err != nil {
-			return fmt.Errorf("error installing deno: %s", err)
+		if p.config.LocalDenoBin == "" {
+			if err := p.curlInstallDeno(ctx, ui, comm); err != nil {
+				return fmt.Errorf("error installing deno: %s", err)
+			}
+		} else {
+			if err := p.localBinInstallDeno(ctx, ui, comm); err != nil {
+				return fmt.Errorf("error installing deno: %s", err)
+			}
 		}
+
 	} else {
 		ui.Message("Skipping Deno installation")
 	}
@@ -158,7 +188,7 @@ func (p *Provisioner) Cancel() {
 }
 
 // installDeno installs deno on the remote host using the public installer script.
-func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
+func (p *Provisioner) curlInstallDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
 
 	var cmd packer.RemoteCmd
 	cmd = packer.RemoteCmd{Command: "apt-get update"}
@@ -184,6 +214,21 @@ func (p *Provisioner) installDeno(ctx context.Context, ui packer.Ui, comm packer
 	return nil
 }
 
+func (p *Provisioner) localBinInstallDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
+	if err := p.createDir(ctx, ui, comm, filepath.Dir(p.config.denoExecutable)); err != nil {
+		return fmt.Errorf("mkdir for local deno bin on remote machine: %v", err)
+	}
+	if err := p.uploadFile(ctx, ui, comm, p.config.denoExecutable, p.config.LocalDenoBin); err != nil {
+		return fmt.Errorf("upload local deno bin: %v", err)
+	}
+	cmd := packer.RemoteCmd{Command: fmt.Sprintf("chmod +x %s", p.config.denoExecutable)}
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "set executable bit"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// execRemoteCommand executes a packer.RemoteCommand, blocks, and checks for exit code 0.
 func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packer.RemoteCmd, ui packer.Ui, msg string) error {
 	if err := cmd.RunWithUi(ctx, comm, ui); err != nil {
 		return fmt.Errorf("error %s: %v", msg, err)
