@@ -5,7 +5,9 @@ Run deno scripts to provision stuff with Packer.
 This is a work in progress. Deno builds are only provided for a few systems, so
 we are only testing on Ubuntu docker containers right now.
 
-TODO
+## TODO
+
+This plugin should be able to
 
 - [x] Install deno onto target system
 - [x] Upload individual deno scripts
