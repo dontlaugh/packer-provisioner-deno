@@ -1,9 +1,13 @@
 # packer-provisioner-deno
 
-Run deno scripts to provision stuff with Packer.
+Run Deno scripts to provision stuff with Packer.
 
-This is a work in progress. Deno builds are only provided for a few systems, so
-we are only testing on Ubuntu docker containers right now.
+This plugin first installs Deno onto the target system, uploads scripts to
+a folder, and then executes them one by one.
+
+Only Ubuntu is known to work with the normal installer script. Provisioning 
+other operating systems works if you use a custom built Deno that will 
+run on that system, and upload it with this plugin using `local_deno_bin`.
 
 ## Installation
 
@@ -53,7 +57,7 @@ After that, run the test script
 ./test.sh
 ```
 
-Local tests run in docker.
+A test build will run in a Docker container.
 
 ## TODO
 
