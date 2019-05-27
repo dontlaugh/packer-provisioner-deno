@@ -1,4 +1,7 @@
 {
+  "variables": {
+      "local_deno_bin": "{{ env `HOME` }}/Code/Deno/deno"
+  },
   "builders": [
     {
       "type": "docker",
@@ -9,6 +12,7 @@
   "provisioners": [
     {
       "type": "deno",
+      "local_deno_bin": "{{ user `local_deno_bin` }}",
       "scripts": [
         "deno-scripts/makeuser.ts",
         "deno-scripts/install-nginx-centos.ts"
