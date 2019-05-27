@@ -17,5 +17,7 @@ go install
 
 (
   cd examples
-  packer build docker.json
+  packer build docker-ubuntu.json
 )
+
+

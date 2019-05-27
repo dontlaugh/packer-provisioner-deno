@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -124,6 +125,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 
 	if !p.config.SkipInstall {
 		if p.config.LocalDenoBin == "" {
+			// Use curl to install deno
 			if err := p.curlInstallDeno(ctx, ui, comm); err != nil {
 				return fmt.Errorf("error installing deno: %s", err)
 			}
@@ -132,7 +134,6 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 				return fmt.Errorf("error installing deno: %s", err)
 			}
 		}
-
 	} else {
 		ui.Message("Skipping Deno installation")
 	}
@@ -167,6 +168,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 			return fmt.Errorf("%s is not a regular file", src)
 		}
 	}
+
 	if !p.config.SkipProvision {
 
 		ui.Say("Running provisioning scripts")
@@ -191,16 +193,16 @@ func (p *Provisioner) Cancel() {
 func (p *Provisioner) curlInstallDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
 
 	var cmd packer.RemoteCmd
-	cmd = packer.RemoteCmd{Command: "apt-get update"}
-	ui.Message("Update package cache")
-	if err := execRemoteCommand(ctx, comm, &cmd, ui, "update package cache"); err != nil {
-		return err
+
+	// upload curl install script
+	buf := bytes.NewBuffer([]byte(installCurlScript))
+	if err := comm.Upload("/tmp/install_curl.sh", buf, nil); err != nil {
+		return fmt.Errorf("error uploading curl install script: %v", err)
 	}
 
-	// TODO: handle other systems when deno binaries for them are available
-	cmd = packer.RemoteCmd{Command: "apt-get install -y curl"}
-	ui.Message("Installing curl")
-	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installing curl"); err != nil {
+	// execute curl install script
+	cmd = packer.RemoteCmd{Command: "sh /tmp/install_curl.sh"}
+	if err := execRemoteCommand(ctx, comm, &cmd, ui, "curl install script"); err != nil {
 		return err
 	}
 
@@ -242,6 +244,7 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 // runDeno runs deno with our uploaded scripts
 func (p *Provisioner) runDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator, scriptPath string) error {
 	commandString := fmt.Sprintf("%s run -A %s", p.config.denoExecutable, scriptPath)
+	ui.Say(commandString)
 	cmd := packer.RemoteCmd{
 		Command: commandString}
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, commandString); err != nil {
@@ -258,7 +261,6 @@ func (p *Provisioner) createDir(ctx context.Context, ui packer.Ui, comm packer.C
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, "create dir"); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -277,13 +279,14 @@ func (p *Provisioner) uploadFile(ctx context.Context, ui packer.Ui, comm packer.
 	return nil
 }
 
+
+
 // uploadDir uploads a directory
 func (p *Provisioner) uploadDir(ctx context.Context, ui packer.Ui, comm packer.Communicator, dst, src string) error {
 	var ignore []string
 	if err := p.createDir(ctx, ui, comm, dst); err != nil {
 		return err
 	}
-
 	// TODO: support Windows '\'
 	if src[len(src)-1] != '/' {
 		src = src + "/"

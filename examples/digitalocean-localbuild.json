@@ -1,12 +1,21 @@
 {
   "_comment": "override local_deno_bin at the command line with your own path",
   "variables": {
-      "local_deno_bin": "{{ env `HOME` }}/Code/Deno/fork/deno/target/debug/deno"
+      "local_deno_bin": "{{ env `HOME` }}/Code/Deno/deno"
   },
   "builders": [
     {
       "type": "digitalocean",
+      "name": "do-ubuntu",
       "image": "ubuntu-18-04-x64",
+      "region": "nyc3",
+      "size": "s-2vcpu-2gb",
+      "ssh_username": "root"
+    },
+    {
+      "type": "digitalocean",
+      "name": "do-centos",
+      "image": "centos-7-x64",
       "region": "nyc3",
       "size": "s-2vcpu-2gb",
       "ssh_username": "root"

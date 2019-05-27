@@ -11,7 +11,7 @@
       "type": "deno",
       "scripts": [
         "deno-scripts/makeuser.ts",
-        "deno-scripts/install-nginx.ts"
+        "deno-scripts/install-nginx-ubuntu.ts"
       ]
     }
   ],
@@ -19,7 +19,7 @@
     {
       "type": "docker-import",
       "repository": "anxiousmodernman/packer-provisioner-deno",
-      "tag": "0.1"
+      "tag": "ubuntu-0.1"
     }
   ]
 }

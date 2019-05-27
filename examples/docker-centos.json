@@ -1,0 +1,25 @@
+{
+  "builders": [
+    {
+      "type": "docker",
+      "image": "centos",
+      "export_path": "image.tar"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "deno",
+      "scripts": [
+        "deno-scripts/makeuser.ts",
+        "deno-scripts/install-nginx-centos.ts"
+      ]
+    }
+  ],
+  "post-processors": [
+    {
+      "type": "docker-import",
+      "repository": "anxiousmodernman/packer-provisioner-deno",
+      "tag": "centos-0.1"
+    }
+  ]
+}
