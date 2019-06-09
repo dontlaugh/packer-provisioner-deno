@@ -4,7 +4,7 @@
       "type": "digitalocean",
       "image": "ubuntu-18-04-x64",
       "region": "nyc3",
-      "size": "s-2vcpu-2gb",
+      "size": "512mb",
       "ssh_username": "root"
     }
   ],

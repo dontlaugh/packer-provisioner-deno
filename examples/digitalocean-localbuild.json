@@ -24,9 +24,7 @@
   "provisioners": [
     {
       "type": "deno",
-      "skip_provision": false,
       "local_deno_bin": "{{ user `local_deno_bin` }}",
-      "remote_folder": "/root/packer-deno",
       "scripts": [
         "deno-scripts/makeuser.ts",
         "deno-scripts/install-nginx.ts"
