@@ -94,7 +94,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 	}
 
 	// TODO find a way to install deno to different places/users/globally
-	p.config.denoExecutable = "/root/.deno/bin/deno"
+	p.config.denoExecutable = "/root/.local/bin/deno"
 	if !filepath.IsAbs(p.config.denoExecutable) {
 		errs = packer.MultiErrorAppend(errs,
 			errors.New("remote target denoExecutable must be an absolute path"))
@@ -278,8 +278,6 @@ func (p *Provisioner) uploadFile(ctx context.Context, ui packer.Ui, comm packer.
 	}
 	return nil
 }
-
-
 
 // uploadDir uploads a directory
 func (p *Provisioner) uploadDir(ctx context.Context, ui packer.Ui, comm packer.Communicator, dst, src string) error {
