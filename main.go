@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/hashicorp/packer/helper/config"
@@ -32,6 +34,9 @@ type DenoConfig struct {
 
 	// The destination folder for uploaded Deno scripts.
 	RemoteFolder string `mapstructure:"remote_folder"`
+
+	// If true, compilation will be attempted on the target instead of locally
+	NoBundle bool
 
 	// A slice of scripts to compile and run.
 	Scripts []string
@@ -112,6 +117,8 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 		}
 	}
 
+	// TODO search for local deno on the PATH
+
 	if errs != nil && len(errs.Errors) > 0 {
 		return errs
 	}
@@ -121,8 +128,31 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 
 // Provision runs the Deno Provisioner.
 func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
-	ui.Say("Provisioning with Deno")
 
+	ui.Say("Bundling script locally before upload")
+	var bundles []string
+	for _, src := range p.config.Scripts {
+		_, err := os.Stat(src)
+		if err != nil {
+			return fmt.Errorf("stat error: %s", err)
+		}
+		ui.Message(fmt.Sprintf("bundling %s", src))
+		bundle, err := BundlePath(src)
+		if err != nil {
+			return err
+		}
+		ui.Say(fmt.Sprintf("bundle output: %s", bundle))
+		cmd := exec.Command("deno", "bundle", src, bundle)
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("could not run: deno bundle %s %s: %v", src, bundle, err)
+		}
+		if err := cmd.Wait(); err != nil {
+			return fmt.Errorf("error bundling %s: %v", src, err)
+		}
+		bundles = append(bundles, bundle)
+	}
+
+	ui.Say("Provisioning with Deno")
 	if !p.config.SkipInstall {
 		if p.config.LocalDenoBin == "" {
 			// Use curl to install deno
@@ -138,10 +168,6 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		ui.Message("Skipping Deno installation")
 	}
 
-	// TODO: compile deno bundles locally, before upload
-	// Once built-in bundling is available, this will become a lot easier:
-	// https://github.com/denoland/deno/issues/2357
-
 	ui.Say("Uploading deno scripts...")
 	if err := p.createDir(ctx, ui, comm, p.config.RemoteFolder); err != nil {
 		return fmt.Errorf("error creating remote directory: %s", err)
@@ -149,7 +175,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 
 	var remoteScripts []string
 
-	for _, src := range p.config.Scripts {
+	for _, src := range bundles {
 		s, err := os.Stat(src)
 		if err != nil {
 			return fmt.Errorf("stat error: %s", err)
@@ -243,10 +269,11 @@ func execRemoteCommand(ctx context.Context, comm packer.Communicator, cmd *packe
 
 // runDeno runs deno with our uploaded scripts
 func (p *Provisioner) runDeno(ctx context.Context, ui packer.Ui, comm packer.Communicator, scriptPath string) error {
+	//commandString := fmt.Sprintf("%s -A %s", p.config.denoExecutable, scriptPath)
+	// https://deno.land/std/bundle/run.ts
 	commandString := fmt.Sprintf("%s run -A %s", p.config.denoExecutable, scriptPath)
 	ui.Say(commandString)
-	cmd := packer.RemoteCmd{
-		Command: commandString}
+	cmd := packer.RemoteCmd{Command: commandString}
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, commandString); err != nil {
 		return err
 	}
@@ -290,4 +317,16 @@ func (p *Provisioner) uploadDir(ctx context.Context, ui packer.Ui, comm packer.C
 		src = src + "/"
 	}
 	return comm.UploadDir(dst, src, ignore)
+}
+
+// BundlePath takes a path and yields an absolute tmpfile path
+func BundlePath(path string) (string, error) {
+	dir, err := ioutil.TempDir("", "packer-provisioner-deno")
+	if err != nil {
+		return "", err
+	}
+	_, splitted := filepath.Split(path)
+	_ = splitted
+	ret := filepath.Join(dir, splitted+".bundle.js")
+	return ret, nil
 }

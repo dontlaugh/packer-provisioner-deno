@@ -62,4 +62,3 @@ if ! [ -x "$(command -v curl)" ]; then
 fi
 
 `
-
