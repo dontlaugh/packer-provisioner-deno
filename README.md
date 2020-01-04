@@ -66,7 +66,7 @@ We want to accomplish the following
 - [x] Execute individual deno scripts as root
 - [x] Add a DigitalOcean cloud builder test
 - [x] Allow uploading local deno builds easily (for testing local dev builds)
-- [ ] Manually bundle scripts locally and upload those, instead. Or, [wait for this feature](https://github.com/denoland/deno/issues/2357).
+- [x] Manually bundle scripts locally and upload those.
 - [ ] Execute scripts as non-root user
 - [ ] Specify sandboxing flags in the packer config (`--allow-net` and friends; we run with `-A` right now)
 - [ ] Global system install of deno outside any user's HOME
