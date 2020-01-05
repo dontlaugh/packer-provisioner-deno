@@ -41,6 +41,9 @@ type DenoConfig struct {
 	// A slice of scripts to compile and run.
 	Scripts []string
 
+	// A git tag we pass to the Deno installer script.
+	TargetDenoVersion string `mapstructure:"target_deno_version"`
+
 	// Path to the deno executable on the remote target; TODO make configurable
 	denoExecutable string
 
@@ -234,6 +237,9 @@ func (p *Provisioner) curlInstallDeno(ctx context.Context, ui packer.Ui, comm pa
 
 	bootstrapURL := "https://deno.land/x/install/install.sh"
 	cmd = packer.RemoteCmd{Command: fmt.Sprintf("curl -fsSL %s | sh", bootstrapURL)}
+	if version := p.config.TargetDenoVersion; version != "" {
+		cmd = packer.RemoteCmd{Command: fmt.Sprintf("curl -fsSL %s | sh -s %s", bootstrapURL, version)}
+	}
 	ui.Message("Downloading and executing deno installer script")
 	if err := execRemoteCommand(ctx, comm, &cmd, ui, "installer script"); err != nil {
 		return err
