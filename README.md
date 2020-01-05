@@ -2,12 +2,8 @@
 
 Run Deno scripts to provision stuff with Packer.
 
-This plugin first installs Deno onto the target system, uploads scripts to
-a folder, and then executes them one by one.
-
-Only Ubuntu is known to work with the normal installer script. Provisioning 
-other operating systems works if you use a custom built Deno that will 
-run on that system, and upload it with this plugin using `local_deno_bin`.
+This plugin installs deno on the target machine, runs `deno bundle` locally, 
+uploads the bundled scripts onto the target machine, and executes them.
 
 ## Installation
 
@@ -28,11 +24,13 @@ You must specify `"type": "deno"` in a provisioners stanza to use this plugin.
 The following provisioner config keys are supported. See also the **examples** directory.
 
 * `local_deno_bin` (string) - A fully qualified path to a local deno executable. This
-  binary will be uploaded to the target `remote_folder`, and used for running scripts.
-  Useful for development if you are building deno from source.
+  binary will be used for local bundling and uploaded to the target `remote_folder`.
+  Useful if you are building deno from source. Other version specifiers ignored.
+* `target_deno_version` (string) - a version passed to the deno installer script.
+  Must match a git tag from deno's [releases](https://github.com/denoland/deno/releases).
+* `remote_folder` (string) - The target directory where `scripts` will be uploaded.
 * `skip_install` (boolean) - If `true`, do not install Deno on the target machine, but
   assume it is already present.
-* `remote_folder` (string) - The target directory where `scripts` will be uploaded.
 * `scripts` (array of string) - A list of paths to TypeScript files that will be
   passed to `deno run -A`, one by one, in order. These are your provisioning scripts.
   Currently, these must be standalone scripts with no path-based dependencies.
