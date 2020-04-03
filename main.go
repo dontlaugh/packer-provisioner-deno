@@ -1,3 +1,4 @@
+//go:generate mapstructure-to-hcl2 -type DenoConfig
 package main
 
 import (
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/hashicorp/hcl/v2/hcldec"
 	"github.com/hashicorp/packer/helper/config"
 	"github.com/hashicorp/packer/packer"
 	"github.com/hashicorp/packer/packer/plugin"
@@ -65,6 +67,11 @@ func main() {
 		panic(err)
 	}
 	server.Serve()
+}
+
+// ConfigSpec is required for HCL compatability.
+func (p *Provisioner) ConfigSpec() hcldec.ObjectSpec {
+	return p.config.FlatMapstructure().HCL2Spec()
 }
 
 // Prepare parses and validates our provisioner config.
@@ -130,7 +137,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 }
 
 // Provision runs the Deno Provisioner.
-func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator) error {
+func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator, _ map[string]interface{}) error {
 
 	ui.Say("Bundling script locally before upload")
 	var bundles []string
